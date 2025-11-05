@@ -24,4 +24,4 @@ jobs:
       - name: Change directory to 'automation' and run the script
         run: |
           cd automation
-          python banana_satffattract_clicks.py $(date -u +"%Y-%m-%d")
+          python banana.py $(date -u +"%Y-%m-%d")
