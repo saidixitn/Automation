@@ -2,7 +2,7 @@ name: Daily Clicks Report Automation
 
 on:
   schedule:
-    - cron: "55 12 * * *"   # runs daily at 12:55 PM UTC = 6:25 PM IST
+    - cron: "30 4 * * *"   # runs daily at 4:30 AM UTC = 10:00 AM IST
   workflow_dispatch:
 
 jobs:
