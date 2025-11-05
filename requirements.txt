@@ -1,0 +1,6 @@
+pymongo
+pandas
+gspread
+google-auth
+python-dotenv
+pytz
