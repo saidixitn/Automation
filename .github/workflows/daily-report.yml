@@ -2,7 +2,7 @@ name: Daily Clicks Report Automation
 
 on:
   schedule:
-    - cron: "50 12 * * *"   # runs daily at 12:50 PM UTC = 6:20 PM IST
+    - cron: "55 12 * * *"   # runs daily at 12:55 PM UTC = 6:25 PM IST
   workflow_dispatch:
 
 jobs:
@@ -23,4 +23,4 @@ jobs:
           pip install -r requirements.txt
       - name: Run Clicks Report
         run: |
-          python banana_staffattract.py $(date -u +"%Y-%m-%d")
+          python automation/banana_satffattract_clicks.py $(date -u +"%Y-%m-%d")
