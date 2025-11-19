@@ -57,6 +57,8 @@ BANANA_IDS = {
     "emp-gxc-banana3":      ("banana3", banana_db["banana3"]),
     "emp-gxc-banana4":      ("banana4", banana_db["banana4"]),
     "emp-gxc-staffattract": ("staffattract", banana_db["staffattract"]),
+    "emp-gxc-apptness": ("apptness", banana_db["apptness"]),
+
 }
 
 # === URL patterns for fallback ===
@@ -307,7 +309,7 @@ def process_date(date_str, sheet):
                            values="Unique Views", aggfunc="sum")
         .fillna(0).astype(int).reset_index()
     )
-    ordered_cols = ["Date", "Analyst", "cpc", "banana", "banana1", "banana2", "banana3", "banana4", "staffattract"]
+    ordered_cols = ["Date", "Analyst", "cpc", "banana", "banana1", "banana2", "banana3", "banana4", "staffattract", "apptness"]
     for col in ordered_cols:
         if col not in cpc_pivot.columns:
             cpc_pivot[col] = 0
