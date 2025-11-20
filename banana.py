@@ -326,7 +326,7 @@ def main():
     if len(sys.argv) < 2:
         print("Usage: python banana_report.py YYYY-MM-DD [YYYY-MM-DD ...]")
         sys.exit(1)
-    sheet = gc.open("Banana & Staffattract Clicks Report")
+    sheet = gc.open("UniqueIP Clicks Report")
     for date_str in sys.argv[1:]:
         process_date(date_str, sheet)
     print("All reports updated successfully.")
