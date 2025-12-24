@@ -73,13 +73,18 @@ stats_col = client["daily_domain_stats"]["stats"]
 email_col = client["daily_domain_stats"]["email"]
 
 # ==========================================================
-# GOOGLE SHEETS (CREDS FROM MONGO)
+# GOOGLE SHEETS (CREDS FROM MONGO - content based)
 # ==========================================================
-google_creds_doc = google_creds_col.find_one({})
-if not google_creds_doc:
-    raise Exception("Google credentials not found in MongoDB")
+google_creds_wrapper = google_creds_col.find_one(
+    {"name": "google_credentials"}
+)
 
-google_creds_doc.pop("_id", None)
+if not google_creds_wrapper:
+    raise Exception("Google credentials document not found in MongoDB")
+
+google_creds = google_creds_wrapper.get("content")
+if not google_creds:
+    raise Exception("Google credentials content is empty in MongoDB")
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -87,7 +92,7 @@ SCOPES = [
 ]
 
 creds = Credentials.from_service_account_info(
-    google_creds_doc,
+    google_creds,
     scopes=SCOPES
 )
 
