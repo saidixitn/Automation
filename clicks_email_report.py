@@ -12,7 +12,7 @@ from email.mime.text import MIMEText
 from google.oauth2.service_account import Credentials
 
 # ==========================================================
-# ENV / SECRETS
+# ENV / SECRETS (GITHUB)
 # ==========================================================
 REMOTE_MONGO_URI = os.getenv("REMOTE_MONGO_URI")
 if not REMOTE_MONGO_URI:
@@ -43,7 +43,7 @@ MIN_DT = datetime.strptime(REPORT_DATE, "%Y-%m-%d").replace(tzinfo=timezone.utc)
 MAX_DT = MIN_DT + timedelta(days=1)
 
 # ==========================================================
-# HELPERS
+# HELPERS (UNCHANGED)
 # ==========================================================
 def clean_domain(d: str) -> str:
     return (d or "").replace("https://", "").replace("http://", "").strip()
@@ -66,25 +66,18 @@ def is_table_domain(domain_type: str) -> bool:
     }
 
 # ==========================================================
-# MONGO (REMOTE)
-# ==========================================================
-client = MongoClient(REMOTE_MONGO_URI)
-
-domains_col = client["mongo_creds"]["creds"]
-stats_col = client["daily_domain_stats"]["stats"]
-email_col = client["daily_domain_stats"]["email"]
-
-# ==========================================================
-# GOOGLE CREDS FROM MONGO (CORRECT)
+# GOOGLE CREDS FROM MONGO (MATCHES YOUR DATA)
 # DB: google_creds
 # Collection: creds
 # Field: content
 # ==========================================================
-google_creds_col = client["google_creds"]["creds"]
+client = MongoClient(REMOTE_MONGO_URI)
 
+google_creds_col = client["google_creds"]["creds"]
 google_creds_doc = google_creds_col.find_one({}, {"content": 1})
+
 if not google_creds_doc or "content" not in google_creds_doc:
-    raise Exception("Google service account not found in MongoDB")
+    raise Exception("Google credentials not found in MongoDB")
 
 creds = Credentials.from_service_account_info(
     google_creds_doc["content"],
@@ -96,7 +89,7 @@ sheet = gc.open("Domain Stats")
 domains_ws = sheet.worksheet("Domains")
 domains_rows = domains_ws.get_all_records()
 
-# Normalize sheet rows
+# Normalize sheet rows (UNCHANGED)
 for r in domains_rows:
     r["Domain"] = (r.get("Domain") or "").strip()
     r["Database"] = (r.get("Database") or "").strip()
@@ -105,7 +98,14 @@ for r in domains_rows:
     r["Collection"] = (r.get("Collection") or "").strip()
 
 # ==========================================================
-# DOMAIN DB CONNECT
+# MONGO COLLECTIONS (UNCHANGED)
+# ==========================================================
+domains_col = client["mongo_creds"]["creds"]
+stats_col = client["daily_domain_stats"]["stats"]
+email_col = client["daily_domain_stats"]["email"]
+
+# ==========================================================
+# DOMAIN DB CONNECT (UNCHANGED)
 # ==========================================================
 def connect_mongo(domain_record, db_name):
     c = MongoClient(domain_record["mongo_uri"], serverSelectionTimeoutMS=8000)
@@ -113,7 +113,7 @@ def connect_mongo(domain_record, db_name):
     return c[db_name]
 
 # ==========================================================
-# FETCH VIEWS (UNCHANGED LOGIC)
+# FETCH VIEWS (UNCHANGED – PIXEL MATCH)
 # ==========================================================
 def fetch_views(domain, db, employer_id, domain_type):
     col = db["userAnalytics"]
@@ -140,7 +140,12 @@ def fetch_views(domain, db, employer_id, domain_type):
         {"$addFields": {
             "End Url Domain": {
                 "$ifNull": [
-                    {"$arrayElemAt": [{"$split": [{"$ifNull": ["$url", ""]}, "/"]}, 2]},
+                    {
+                        "$arrayElemAt": [
+                            {"$split": [{"$ifNull": ["$url", ""]}, "/"]},
+                            2
+                        ]
+                    },
                     ""
                 ]
             }
@@ -169,7 +174,7 @@ def fetch_views(domain, db, employer_id, domain_type):
     return list(col.aggregate(pipeline, allowDiskUse=True))
 
 # ==========================================================
-# DOMAIN WORKER
+# DOMAIN WORKER (UNCHANGED)
 # ==========================================================
 def process_domain(row):
     if not row["Domain"] or not row["Database"]:
@@ -188,7 +193,7 @@ def process_domain(row):
     )
 
 # ==========================================================
-# RUN STATS
+# RUN STATS (UNCHANGED)
 # ==========================================================
 stats_col.delete_many({"Date": REPORT_DATE})
 
@@ -205,7 +210,7 @@ if all_rows:
     stats_col.insert_many(all_rows)
 
 # ==========================================================
-# AGGREGATE FOR EMAIL (IDENTICAL TO LOCAL)
+# AGGREGATION (UNCHANGED)
 # ==========================================================
 domains = defaultdict(lambda: {
     "type": "",
@@ -220,6 +225,7 @@ for r in domains_rows:
 
 for r in all_rows:
     d = domains[r["Domain"]]
+
     clicks = to_int(r["ViewsCount"])
     ips = to_int(r["UniqueIpCount"])
 
@@ -231,29 +237,111 @@ for r in all_rows:
     d["rows"][key]["ips"] += ips
 
 # ==========================================================
-# EMAIL HTML BUILDER (UNCHANGED)
+# HTML BUILDER (💯 IDENTICAL TO LOCAL)
 # ==========================================================
 def build_html(name, email):
     total_domains = len(domains)
     total_clicks = sum(d["clicks"] for d in domains.values())
     total_ips = sum(d["ips"] for d in domains.values())
+
     companies = {c for d in domains.values() for (c, _) in d["rows"].keys()}
 
     blocks = ""
+
     for domain, d in sorted(domains.items(), key=lambda x: x[1]["clicks"], reverse=True):
-        blocks += f"""
-        <div style="padding:24px;margin-bottom:20px;border:1px solid #e5e7eb;border-radius:16px">
-        <strong>{clean_domain(domain)}</strong><br/>
-        Clicks: {d['clicks']} | IPs: {d['ips']}
-        </div>
-        """
+        domain_type = d.get("type", "") or ""
+        table = ""
+
+        if is_table_domain(domain_type):
+            rows_html = ""
+            row_items = sorted(d["rows"].items(), key=lambda kv: kv[1]["clicks"], reverse=True)
+
+            for (company, end), s in row_items:
+                if not end:
+                    continue
+                rows_html += f"""
+  <tr>
+    <td style="padding: 10px;">{company}</td>
+    <td style="padding: 10px;">{end}</td>
+    <td style="padding: 10px; text-align: right;">{s['clicks']}</td>
+    <td style="padding: 10px; text-align: right;">{s['ips']}</td>
+  </tr>
+"""
+
+            table = f"""
+  <table style="width: 100%; border-collapse: collapse; margin-top: 18px; background: #fafbff; border-radius: 14px; overflow: hidden; border: 1px solid #e2e7ff;">
+    <thead>
+      <tr style="background: #eef2ff;">
+        <th style="padding: 10px; font-size: 12px; text-align: left;">Company</th>
+        <th style="padding: 10px; font-size: 12px; text-align: left;">End Url Domain</th>
+        <th style="padding: 10px; font-size: 12px; text-align: right;">Clicks</th>
+        <th style="padding: 10px; font-size: 12px; text-align: right;">Unique IPs</th>
+      </tr>
+    </thead>
+    <tbody>
+{rows_html}
+    </tbody>
+  </table>
+"""
+
+            blocks += f"""
+  <div style="padding: 26px; margin-bottom: 28px; border-radius: 24px; background: #ffffff; border: 1px solid #e4e6ef; box-shadow: 0 8px 24px rgba(99,102,241,0.14);">
+    <h3 style="margin: 0 0 6px 0; font-size: 20px; color: #4f46e5; font-weight: 600;">{clean_domain(domain)}</h3>
+    <div style="font-size: 14px; color: #374151; margin-bottom: 14px;">
+      <strong>Domain Type:</strong>
+      <span style="display: inline-block; padding: 3px 10px; border-radius: 999px; background: #eef2ff; color: #4338ca; font-size: 12px; font-weight: 600;">
+        {domain_type}
+      </span>
+    </div>
+    <div style="margin-top: 10px; font-size: 15px;">
+      <strong>Total Clicks:</strong> {d['clicks']} &nbsp;&nbsp;
+      <strong>Unique IPs:</strong> {d['ips']}
+    </div>
+{table}
+  </div>
+"""
+        else:
+            blocks += f"""
+  <div style="padding: 26px; margin-bottom: 28px; border-radius: 24px; background: #ffffff; border: 1px solid #e4e6ef; box-shadow: 0 8px 24px rgba(99,102,241,0.14);">
+    <h3 style="margin: 0 0 6px 0; font-size: 20px; color: #4f46e5; font-weight: 600;">{clean_domain(domain)}</h3>
+    <div style="font-size: 14px; color: #374151; margin-bottom: 12px;">
+      <strong>Domain Type:</strong> {domain_type}
+    </div>
+    <div style="font-size: 15px; line-height: 1.6;">
+      <strong>Clicks:</strong> {d['clicks']}<br />
+      <strong>Unique IPs:</strong> {d['ips']}
+    </div>
+  </div>
+"""
 
     return f"""
-    <h2>Daily Domain Wise Clicks Report ⚡</h2>
-    <p>Date: {REPORT_DATE}</p>
-    <p>Domains: {total_domains} | Companies: {len(companies)} | Clicks: {total_clicks} | IPs: {total_ips}</p>
-    {blocks}
-    """
+  <p>&nbsp;</p>
+  <div style="padding: 40px;">
+    <div style="max-width: 840px; margin: 0 auto; background: linear-gradient(145deg,#ffffff,#f5f7ff); padding: 44px; border-radius: 28px; box-shadow: 0 14px 36px rgba(80,80,200,0.18); font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 500; color: #111827;">Hey {name},</h1>
+      <h3 style="margin: 0 0 26px 0; font-size: 17px; font-weight: 600; color: #6b7280;">Here&rsquo;s your daily domain wise clicks report.</h3>
+
+      <h1 style="margin: 0 0 10px 0; font-size: 30px; font-weight: 600; color: #4338ca;">Daily Domain Wise Clicks Report ⚡</h1>
+      <p style="margin: 0 0 30px 0; color: #6b7280; font-size: 15px;">Date: <strong>{REPORT_DATE}</strong></p>
+
+      <div style="background: linear-gradient(135deg,#e4e7ff,#d8dcff); padding: 22px 26px; border-radius: 22px; border-left: 6px solid #6366f1; margin-bottom: 36px;">
+        <div style="font-size: 15px; color: #374151; line-height: 1.7;">
+          <strong>🌐 Domains:</strong> {total_domains}<br />
+          <strong>🏢 Companies:</strong> {len(companies)}<br />
+          <strong>🖱 Total Clicks:</strong> {total_clicks:,}<br />
+          <strong>🧍 Unique IPs:</strong> {total_ips:,}
+        </div>
+      </div>
+
+{blocks}
+
+      <div style="margin-top: 42px; text-align: center; color: #9ca3af; font-size: 13px;">
+        Sent to <strong>{name}</strong> &middot; {email}<br />
+        Generated automatically &middot; Daily Domain Analytics
+      </div>
+    </div>
+  </div>
+"""
 
 # ==========================================================
 # SEND EMAIL
@@ -266,7 +354,7 @@ for r in email_col.find({}, {"_id": 0}):
     msg["From"] = "Daily Clicks Report"
     msg["To"] = r["email"]
     msg["Subject"] = f"Daily Domain Click Report - {REPORT_DATE}"
-    msg.attach(MIMEText(build_html(r.get("Name", "There"), r["email"]), "html"))
+    msg.attach(MIMEText(build_html(r.get("Name", "There"), r.get("email", "")), "html"))
     server.send_message(msg)
 
 server.quit()
